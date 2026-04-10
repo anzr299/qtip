@@ -1,5 +1,5 @@
+import torch  # must be imported before qtip_kernels so libc10.so is loaded
 import qtip_kernels
-import torch
 
 kernels = [
     (1024, 1, 3072, 4),

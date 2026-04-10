@@ -309,9 +309,10 @@ def quantize_finetune_decoder_layer(mixed_layer, quant_order, idx, cb, args,
             attrgetter('.'.join(split_attr[:-1]))(mixed_layer), split_attr[-1],
             q_linear)
 
-        with torch.enable_grad():
-            finetune_decoder_layer(mixed_layer, f'{idx}_{name}', device,
-                                   train_dl, valid_dl, orig_dtype, args)
+        if args.ft_epochs > 0:
+            with torch.enable_grad():
+                finetune_decoder_layer(mixed_layer, f'{idx}_{name}', device,
+                                       train_dl, valid_dl, orig_dtype, args)
 
         cb = cb.cpu()
         utils.clean()
