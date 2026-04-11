@@ -14,6 +14,7 @@ set -euo pipefail
 # Example:
 #   ./run_qtip_1mad_pipeline.sh meta-llama/Llama-3.1-8B l31_8b_2bit_1mad 0,1
 
+
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <MODEL_ID> <RUN_TAG> [GPU_LIST]"
   exit 1
@@ -89,13 +90,17 @@ echo "[INFO] Log: $LOG_FILE"
     --hf_output_path "$HF_DIR"
 
   echo "===== STAGE 4: Evaluate perplexity ====="
-  "$PY" -m eval.eval_ppl \
-    --hf_path "$HF_DIR"
+  accelerate launch --multi_gpu --num_processes 2 -m eval.eval_ppl \
+    --hf_path "$HF_DIR" \
+    --manifest
 
   echo "===== STAGE 5: Evaluate zeroshot ====="
-  "$PY" -m eval.eval_zeroshot \
+  # "$PY" -m eval.eval_zeroshot \
+  accelerate launch --multi_gpu --num_processes 2 -m eval.eval_zeroshot \
     --tasks gsm8k \
     --batch_size 16 \
+    --num_fewshot 5 \
+    --manifest_model \
     --hf_path "$HF_DIR"
 
   echo "===== DONE ====="
