@@ -4,9 +4,9 @@ import math
 import os
 import random
 
-import datasets
 import glog
 import torch
+from accelerate import Accelerator
 from tqdm import tqdm
 
 from lib.linear import QuantizedLinear
@@ -24,17 +24,23 @@ parser.add_argument('--max_mem_ratio', default=0.7, type=float)
 
 
 def main(args):
-    datasets = ['wikitext2', 'c4']
-    model, model_str = model_from_hf_path(args.hf_path, max_mem_ratio=args.max_mem_ratio)
+    accelerator = Accelerator()
+    device = accelerator.device
+
+    if accelerator.num_processes > 1:
+        device_map = {'': accelerator.local_process_index}
+    else:
+        device_map = None
+
+    model, model_str = model_from_hf_path(
+        args.hf_path, max_mem_ratio=args.max_mem_ratio, device_map=device_map)
 
     if args.manifest:
-        # manifest the model in BF/FP16 for faster inference
-        # useful for non-kernel supported decode modes
         for module in model.modules():
             if isinstance(module, QuantizedLinear):
                 module.mode = 'train-fixW'
 
-    for dataset in datasets:
+    for dataset in ['wikitext2', 'c4']:
         input_tok = gptq_data_utils.get_test_tokens(dataset,
                                                     seed=args.seed,
                                                     seqlen=args.seqlen,
@@ -43,11 +49,13 @@ def main(args):
         input_tok = input_tok[0, :(args.seqlen * nsamples)].view(
             nsamples, args.seqlen)
 
-        loss_fct = torch.nn.CrossEntropyLoss().cuda()
+        indices = list(range(accelerator.process_index, nsamples, accelerator.num_processes))
+
+        loss_fct = torch.nn.CrossEntropyLoss().to(device)
         acc_loss = 0.0
-        progress = tqdm(range(nsamples))
-        for ii in progress:
-            input = input_tok[ii, :].cuda().view(1, -1)
+        progress = tqdm(indices, disable=not accelerator.is_main_process)
+        for count, ii in enumerate(progress, 1):
+            input = input_tok[ii, :].to(device).view(1, -1)
             output = model(input,
                            use_cache=False,
                            output_hidden_states=False,
@@ -57,12 +65,19 @@ def main(args):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
             acc_loss += loss.item()
-            progress.set_description(f"avg_loss = {acc_loss/(ii+1)}")
+            progress.set_description(f"avg_loss = {acc_loss/count}")
 
-        avg_loss = acc_loss / nsamples
+        acc_loss_t = torch.tensor([acc_loss], device=device, dtype=torch.float64)
+        nsamples_t = torch.tensor([len(indices)], device=device, dtype=torch.float64)
+        all_losses = accelerator.gather(acc_loss_t)
+        all_nsamples = accelerator.gather(nsamples_t)
 
-        ppl = torch.exp(torch.tensor(avg_loss)).item()
-        glog.info(f'{dataset} perplexity: {ppl}')
+        if accelerator.is_main_process:
+            avg_loss = all_losses.sum().item() / all_nsamples.sum().item()
+            ppl = torch.exp(torch.tensor(avg_loss)).item()
+            glog.info(f'{dataset} perplexity: {ppl}')
+
+    accelerator.wait_for_everyone()
 
 
 if __name__ == '__main__':
