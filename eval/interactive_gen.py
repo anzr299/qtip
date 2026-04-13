@@ -122,6 +122,7 @@ def main(hf_path, compile, interactive, max_tokens, top_k):
     tokenizer = AutoTokenizer.from_pretrained(model_str)
 
     tokenizer.pad_token = tokenizer.eos_token
+    print("MODEL SHARED=", sharded)
     if not sharded:
         past_kv = StaticCache(model.config,
                               1,
@@ -154,11 +155,13 @@ def main(hf_path, compile, interactive, max_tokens, top_k):
                                               fullgraph=True)
 
 
-
+    print("Compilation Started...")
     text = "This is a test of this large language model"
     ids, text, _ = generate(model, tokenizer, text,
                             16, top_k, callback, past_kv)
+    print("Compilation Over!")
 
+    print("Beginning Generation...")
     while True:
         prompt = input("What is your prompt? ")
         if prompt == 'quit':
