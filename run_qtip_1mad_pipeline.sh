@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 # Full QTIP 1MAD pipeline for any Llama model:
 # 1) Hessian generation
 # 2) Quantization (1MAD)
@@ -12,8 +11,7 @@ set -euo pipefail
 #   ./run_qtip_1mad_pipeline.sh <MODEL_ID> <RUN_TAG> [GPU_LIST]
 #
 # Example:
-#   ./run_qtip_1mad_pipeline.sh meta-llama/Llama-3.1-8B l31_8b_2bit_1mad 0,1
-
+#   ./run_qtip_1mad_pipeline.sh meta-llama/Llama-3.1-8B l31_8b_2bit_1mad 0,1,2,3,4,5,6,7,8
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <MODEL_ID> <RUN_TAG> [GPU_LIST]"
@@ -22,13 +20,27 @@ fi
 
 MODEL_ID="$1"
 RUN_TAG="$2"
-GPU_LIST="${3:-0,1}"
+
+# Auto-detect all available GPUs if not specified
+DEFAULT_GPUS=$(nvidia-smi --list-gpus | awk '{print NR-1}' | paste -sd,)
+GPU_LIST="${3:-$DEFAULT_GPUS}"
+
+# Count GPUs correctly by splitting on comma
+IFS=',' read -ra GPU_ARRAY <<< "$GPU_LIST"
+NUM_GPUS=${#GPU_ARRAY[@]}
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PY="/home/user/Documents/qtip_experiments/.env-qtip/bin/python"
+
+# Auto-detect Python from active venv or fall back to known path
+if [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then
+  PY="$VIRTUAL_ENV/bin/python"
+else
+  PY="/home/anazir/qtip_experiments/.env-qtip/bin/python"
+fi
 
 if [[ ! -x "$PY" ]]; then
   echo "Python env not found or not executable: $PY"
+  echo "Please activate your venv: source /home/anazir/qtip_experiments/.env-qtip/bin/activate"
   exit 1
 fi
 
@@ -41,13 +53,14 @@ CKPT_DIR="$ROOT_DIR/checkpoint/$RUN_TAG"
 HF_DIR="$ROOT_DIR/hf/$RUN_TAG"
 LOG_DIR="$ROOT_DIR/log"
 LOG_FILE="$LOG_DIR/$RUN_TAG.log"
-
 mkdir -p "$HESS_DIR" "$CKPT_DIR" "$HF_DIR" "$LOG_DIR"
 
-echo "[INFO] Model: $MODEL_ID"
-echo "[INFO] Run tag: $RUN_TAG"
-echo "[INFO] GPUs: $CUDA_VISIBLE_DEVICES"
-echo "[INFO] Log: $LOG_FILE"
+echo "[INFO] Model:    $MODEL_ID"
+echo "[INFO] Run tag:  $RUN_TAG"
+echo "[INFO] GPUs:     $CUDA_VISIBLE_DEVICES"
+echo "[INFO] Num GPUs: $NUM_GPUS"
+echo "[INFO] Python:   $PY"
+echo "[INFO] Log:      $LOG_FILE"
 
 # Optional dependency safety (no-op if already installed)
 "$PY" -m pip install -q sentencepiece protobuf glog
@@ -57,13 +70,13 @@ echo "[INFO] Log: $LOG_FILE"
   if ls "$HESS_DIR"/*.pt 1>/dev/null 2>&1; then
     echo "[SKIP] Hessians for $MODEL_ID already exist in $HESS_DIR, skipping generation."
   else
-    "$PY" -m torch.distributed.run --standalone --nproc_per_node=2 \
+    "$PY" -m torch.distributed.run --standalone --nproc_per_node=$NUM_GPUS \
       -m quantize_llama.input_hessian_llama \
       --base_model "$MODEL_ID" \
       --save_path "$HESS_DIR" \
       --devset_size 512 \
       --large_batch_size 256 \
-      --batch_size 2 \
+      --batch_size 32 \
       --ctx_size 4096 \
       --sample_proc 8
   fi
@@ -90,15 +103,14 @@ echo "[INFO] Log: $LOG_FILE"
     --hf_output_path "$HF_DIR"
 
   echo "===== STAGE 4: Evaluate perplexity ====="
-  accelerate launch --multi_gpu --num_processes 2 -m eval.eval_ppl \
+  accelerate launch --multi_gpu --num_processes $NUM_GPUS -m eval.eval_ppl \
     --hf_path "$HF_DIR" \
     --manifest
 
   echo "===== STAGE 5: Evaluate zeroshot ====="
-  # "$PY" -m eval.eval_zeroshot \
-  accelerate launch --multi_gpu --num_processes 2 -m eval.eval_zeroshot \
+  accelerate launch --multi_gpu --num_processes $NUM_GPUS -m eval.eval_zeroshot \
     --tasks gsm8k \
-    --batch_size 16 \
+    --batch_size 32 \
     --num_fewshot 5 \
     --manifest_model \
     --hf_path "$HF_DIR"

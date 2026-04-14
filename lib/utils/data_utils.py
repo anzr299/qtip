@@ -9,7 +9,7 @@ from lib import codebook
 
 from .matmul_had import matmul_hadU
 from .misc import clean
-
+import os
 
 def flat_to_sym(V, N):
     A = torch.zeros(N, N, dtype=V.dtype, device=V.device)
@@ -194,10 +194,11 @@ def wrap_tokenizer(tokenizer, x, ctx_size, truncate=True):
 
 
 def sample_rp1t(tokenizer, size=128, ctx_size=2048, nproc=1):
+    nproc = 1
     dataset = load_dataset('togethercomputer/RedPajama-Data-1T',
                            'default',
                            split="train",
-                           streaming=True,)
+			   streaming=True,)
     iter_dataset = iter(dataset)
     dataset = []
     while len(dataset) < 5000:
@@ -244,18 +245,25 @@ def sample_rp1t(tokenizer, size=128, ctx_size=2048, nproc=1):
 
 
 def sample_rp1t_concat(tokenizer, size=128, ctx_size=2048, nproc=1):
-    dataset = load_dataset('togethercomputer/RedPajama-Data-1T',
-                           'default',
-                           split="train",
-                           streaming=True,)
-    iter_dataset = iter(dataset)
-    dataset = []
-    while len(dataset) < 5000:
-        row = next(iter_dataset)
-        text = row.get('text')
-        if text:
-            dataset.append(row)
-    dataset = HFDataset.from_list(dataset)
+    nproc = 1
+    cache_path = '/local_ssd2/anazir/redpajama_cache'
+    if os.path.exists(cache_path):
+        print(f'[INFO] Loading RedPajama from local cache: {cache_path}')
+        dataset = HFDataset.load_from_disk(cache_path)
+    else:
+    	dataset = load_dataset('togethercomputer/RedPajamajama-Data-1T',
+        	                   'default',
+	                           trust_remote_code=true,
+				   split="train",
+				   streaming=True,)
+    	iter_dataset = iter(dataset)
+    	dataset = []
+    	while len(dataset) < 5000:
+        	row = next(iter_dataset)
+        	text = row.get('text')
+        	if text:
+        	    dataset.append(row)
+    	dataset = HFDataset.from_list(dataset)
     devset = torch.zeros((size, ctx_size), dtype=torch.int64)
     concat = []
     p = mp.Pool(nproc)

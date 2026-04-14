@@ -19,7 +19,7 @@ echo "[1/6] Creating virtual environment at $ENV_DIR"
 if [[ -d "$ENV_DIR" ]]; then
     echo "  Environment already exists, skipping creation."
 else
-    python3 -m venv "$ENV_DIR"
+    python3.10 -m venv "$ENV_DIR"
 fi
 
 PY="$ENV_DIR/bin/python"
@@ -34,7 +34,7 @@ echo "[3/6] Installing PyTorch 2.4.0 (CUDA 12.1)"
 echo "[4/6] Installing Python dependencies"
 "$PIP" install \
     accelerate>=0.34.2 \
-    cuda-python==12.6.0 \
+    cuda-python==12.3.0 \
     datasets>=2.20.0 \
     glog==0.3.1 \
     huggingface-hub==0.24.0 \
@@ -53,10 +53,10 @@ else
     echo "  Cloning fast-hadamard-transform..."
     git clone https://github.com/Dao-AILab/fast-hadamard-transform.git "$FHT_DIR"
 fi
-"$PIP" install -e "$FHT_DIR"
+"$PIP" install --no-build-isolation -e "$FHT_DIR"
 
 echo "[6/6] Installing QTIP CUDA kernels"
-"$PIP" install -e "$SCRIPT_DIR/qtip-kernels"
+"$PIP" install --no-build-isolation -e "$SCRIPT_DIR/qtip-kernels"
 
 echo ""
 echo "===== Setup complete ====="

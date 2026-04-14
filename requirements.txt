@@ -1,7 +1,7 @@
 accelerate==0.34.2
-cuda_python==12.6.0
+cuda_python==12.3.0
 datasets==2.20.0
-fast_hadamard_transform==1.0.4.post1
+fast_hadamard_transform>=1.0.4.post1
 glog==0.3.1
 huggingface_hub==0.24.0
 lm_eval==0.4.4
