@@ -9,7 +9,15 @@ import torch
 from packaging import version
 
 from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
+try:
+    from transformers.utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
+except ImportError:
+    from transformers.utils import is_hqq_available, is_torchdynamo_compiling, logging
+    try:
+        from transformers.utils import is_optimum_quanto_available as is_quanto_available
+    except ImportError:
+        def is_quanto_available():
+            return False
 from transformers.utils.deprecation import deprecate_kwarg
 
 

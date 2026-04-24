@@ -53,6 +53,8 @@ parser.add_argument('--ft_train_lut', action='store_true')
 parser.add_argument('--split_for_tp', action='store_true')
 parser.add_argument('--tp_rank', default=8, type=int)
 parser.add_argument('--skip_list', default=None, type=str)
+parser.add_argument('--skip_layers', default=None, type=str,
+                    help='Comma-separated layer indices to skip entirely (kept in fp16), e.g. "0,1,31"')
 
 
 def check_exist(idx, args):
@@ -99,7 +101,23 @@ def quantize_llama_decoder(layer, idx, cb, args, device, pre_orig_emb,
 def main(args):
     if args.skip_list is not None:
         args.skip_list = args.skip_list.split(',')
-        
+    else:
+        args.skip_list = []
+
+    # Expand --skip_layers into sublayer skip_list entries
+    if args.skip_layers is not None:
+        sublayer_names = ['q', 'k', 'v', 'o', 'up', 'gate', 'down']
+        for layer_idx in args.skip_layers.split(','):
+            layer_idx = layer_idx.strip()
+            for name in sublayer_names:
+                entry = f'{layer_idx}_{name}'
+                if entry not in args.skip_list:
+                    args.skip_list.append(entry)
+        glog.info(f'skip_layers expanded skip_list to: {args.skip_list}')
+
+    if not args.skip_list:
+        args.skip_list = None
+
     dtype_ = torch.float64 if args.use_fp64 else torch.float32
 
     cb = bitshift.bitshift_codebook(L=args.L,

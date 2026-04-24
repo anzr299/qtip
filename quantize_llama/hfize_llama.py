@@ -9,7 +9,8 @@ from transformers import AutoTokenizer
 from lib import codebook, utils
 from lib.utils.unsafe_import import model_from_hf_path
 from model.llama import LlamaForCausalLM
-from transformers import LlamaForCausalLM as OrigLlama
+from model.qwen3 import Qwen3ForCausalLM
+from transformers import AutoModelForCausalLM
 
 torch.set_grad_enabled(False)
 
@@ -26,17 +27,23 @@ def main(args):
     glog.info(model_config)
     fused = model_config.quip_params.get('fused', True)
 
+    model_type = model_config.model_type
+    if model_type == 'qwen3':
+        quant_model_cls = Qwen3ForCausalLM
+    else:
+        quant_model_cls = LlamaForCausalLM
+
     tokenizer = AutoTokenizer.from_pretrained(model_config._name_or_path)
 
-    model = LlamaForCausalLM.from_pretrained(model_config._name_or_path,
-                                             torch_dtype='auto',
-                                             low_cpu_mem_usage=True,
-                                             config=model_config)
+    model = quant_model_cls.from_pretrained(model_config._name_or_path,
+                                            torch_dtype='auto',
+                                            low_cpu_mem_usage=True,
+                                            config=model_config)
 
-    orig_model = OrigLlama.from_pretrained(model_config._name_or_path,
-                                           torch_dtype='auto',
-                                           low_cpu_mem_usage=True,
-                                           config=model_config)
+    orig_model = AutoModelForCausalLM.from_pretrained(model_config._name_or_path,
+                                                      torch_dtype='auto',
+                                                      low_cpu_mem_usage=True,
+                                                      config=model_config)
 
     if model_config.quip_params['skip_list'] is None:
         model_config.quip_params['skip_list'] = []

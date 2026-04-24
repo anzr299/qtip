@@ -21,7 +21,7 @@ parser.add_argument('--hf_path', default='hfized/quantized_hada_70b', type=str)
 parser.add_argument('--batch_size', type=int, default=1, help='batch size')
 parser.add_argument("--tasks", type=str)
 parser.add_argument("--output_path", default=None, type=str)
-parser.add_argument('--num_fewshot', type=int, default=0)
+parser.add_argument('--num_fewshot', type=int, default=None)
 parser.add_argument('--limit', type=int, default=None)
 parser.add_argument('--apply_chat_template', action='store_true')
 parser.add_argument('--fewshot_as_multiturn', action='store_true')
@@ -62,9 +62,10 @@ def main(args):
         model=lm_eval_model,
         tasks=task_names,
         limit=args.limit,
-        num_fewshot=args.num_fewshot,
         apply_chat_template=args.apply_chat_template,
-        fewshot_as_multiturn=args.fewshot_as_multiturn)
+        fewshot_as_multiturn=args.fewshot_as_multiturn,
+        num_fewshot=args.num_fewshot,
+    )
 
     if accelerator.is_main_process:
         for key in results['results']:

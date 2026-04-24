@@ -194,7 +194,6 @@ def wrap_tokenizer(tokenizer, x, ctx_size, truncate=True):
 
 
 def sample_rp1t(tokenizer, size=128, ctx_size=2048, nproc=1):
-    nproc = 1
     dataset = load_dataset('togethercomputer/RedPajama-Data-1T',
                            'default',
                            split="train",
@@ -245,7 +244,6 @@ def sample_rp1t(tokenizer, size=128, ctx_size=2048, nproc=1):
 
 
 def sample_rp1t_concat(tokenizer, size=128, ctx_size=2048, nproc=1):
-    nproc = 1
     cache_path = '/local_ssd2/anazir/redpajama_cache'
     if os.path.exists(cache_path):
         print(f'[INFO] Loading RedPajama from local cache: {cache_path}')
