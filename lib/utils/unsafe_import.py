@@ -8,6 +8,7 @@ import torch
 import transformers
 
 from model.llama import LlamaForCausalLM
+from model.qwen3 import Qwen3ForCausalLM
 
 
 def model_from_hf_path(path, max_mem_ratio=0.7, device_map=None):
@@ -21,11 +22,18 @@ def model_from_hf_path(path, max_mem_ratio=0.7, device_map=None):
             model_str = transformers.LlamaConfig.from_pretrained(
                 path)._name_or_path
             model_cls = LlamaForCausalLM
+            no_split_cls = 'LlamaDecoderLayer'
+        elif model_type == 'qwen3':
+            model_str = transformers.AutoConfig.from_pretrained(
+                path)._name_or_path
+            model_cls = Qwen3ForCausalLM
+            no_split_cls = 'Qwen3DecoderLayer'
         else:
-            raise Exception
+            raise Exception(f'Unsupported quantized model type: {model_type}')
     else:
         model_cls = transformers.AutoModelForCausalLM
         model_str = path
+        no_split_cls = None
 
     if device_map is None:
         mmap = {
@@ -36,9 +44,10 @@ def model_from_hf_path(path, max_mem_ratio=0.7, device_map=None):
                                           torch_dtype='auto',
                                           low_cpu_mem_usage=True,
                                           attn_implementation='sdpa')
+        no_split = [no_split_cls] if no_split_cls else ['LlamaDecoderLayer', 'Qwen3DecoderLayer']
         device_map = accelerate.infer_auto_device_map(
             model,
-            no_split_module_classes=['LlamaDecoderLayer'],
+            no_split_module_classes=no_split,
             max_memory=mmap)
     model = model_cls.from_pretrained(path,
                                       torch_dtype='auto',
